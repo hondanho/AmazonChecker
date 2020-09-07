@@ -61,6 +61,7 @@
             this.tbLinkFileExcel.ReadOnly = true;
             this.tbLinkFileExcel.Size = new System.Drawing.Size(376, 23);
             this.tbLinkFileExcel.TabIndex = 1;
+            this.tbLinkFileExcel.TextChanged += new System.EventHandler(this.tbLinkFileExcel_TextChanged);
             this.tbLinkFileExcel.MouseDoubleClick += new System.Windows.Forms.MouseEventHandler(this.tbLinkFileExcel_MouseDoubleClick);
             // 
             // btnRun

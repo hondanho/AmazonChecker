@@ -70,10 +70,10 @@
             this.btnRun.Cursor = System.Windows.Forms.Cursors.Hand;
             this.btnRun.Font = new System.Drawing.Font(".VnArialH", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.btnRun.ForeColor = System.Drawing.Color.White;
-            this.btnRun.Location = new System.Drawing.Point(105, 195);
+            this.btnRun.Location = new System.Drawing.Point(127, 217);
             this.btnRun.Margin = new System.Windows.Forms.Padding(4);
             this.btnRun.Name = "btnRun";
-            this.btnRun.Size = new System.Drawing.Size(160, 59);
+            this.btnRun.Size = new System.Drawing.Size(122, 37);
             this.btnRun.TabIndex = 2;
             this.btnRun.Text = "Run";
             this.btnRun.UseVisualStyleBackColor = false;
@@ -86,10 +86,10 @@
             this.btnStop.Enabled = false;
             this.btnStop.Font = new System.Drawing.Font(".VnArialH", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.btnStop.ForeColor = System.Drawing.Color.Transparent;
-            this.btnStop.Location = new System.Drawing.Point(291, 195);
+            this.btnStop.Location = new System.Drawing.Point(278, 217);
             this.btnStop.Margin = new System.Windows.Forms.Padding(4);
             this.btnStop.Name = "btnStop";
-            this.btnStop.Size = new System.Drawing.Size(160, 59);
+            this.btnStop.Size = new System.Drawing.Size(117, 37);
             this.btnStop.TabIndex = 3;
             this.btnStop.Text = "Stop";
             this.btnStop.UseVisualStyleBackColor = false;

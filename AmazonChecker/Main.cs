@@ -27,6 +27,7 @@ namespace AmazonChecker
 
         private const string URL_PRIME = @"https://www.amazon.com/gp/offer-listing/{0}/ref=olp_f_primeEligible?ie=UTF8&f_primeEligible=true";
         private const string XPATH_PRIME = "//input[@type='checkbox'][@name='olpCheckbox_primeEligible']";
+        private const string XPATH_PRIME_NOTE = "//*[@id='olpOfferList']//ul[@class='a-unordered-list a-vertical olpFastTrack']/li[1]";
 
         private const string XPATH_OUT_STOCK = "//*[@id='availability']/span";
 
@@ -126,6 +127,8 @@ namespace AmazonChecker
 
                 var totalRecode = excelWorksheet.Dimension.End.Row;
                 StartProcess(totalRecode - 1);
+                var isChangeDeliver = false;
+
                 for (int i = 2; i <= totalRecode; i++)
                 {
                     try
@@ -179,23 +182,27 @@ namespace AmazonChecker
                                 excelWorksheet.Cells[i, 4].Style.Font.Color.SetColor(Color.Red);
                             }
 
-                            //column 6: out stock
-                            var isChangeDeliver = ChangeDeliverVnToUs(asinCode.Text);
+                            if (!isChangeDeliver)
+                            {
+                                isChangeDeliver = ChangeDeliverVnToUs(asinCode.Text);
+                            }
+
                             if (isChangeDeliver)
                             {
+                                //column 6: out stock
                                 var lstOutStock = FindElements(XPATH_OUT_STOCK);
-                                var isOutStock = false;
+                                var isInStock = false;
                                 foreach (var outStock in lstOutStock)
                                 {
                                     if (outStock != null && !string.IsNullOrEmpty(outStock.Text) && outStock.Text.ToLower().Contains("In Stock".ToLower()))
                                     {
-                                        isOutStock = true;
+                                        isInStock = true;
                                         break;
                                     }
                                 }
-                                if (excelWorksheet.Cells[i, 6].Value == null || isOutStock != excelWorksheet.Cells[i, 6].Value.ToString().ToLower().Equals(YES.ToLower()))
+                                if (excelWorksheet.Cells[i, 6].Value == null || isInStock != excelWorksheet.Cells[i, 6].Value.ToString().ToLower().Equals(YES.ToLower()))
                                 {
-                                    excelWorksheet.Cells[i, 6].Value = isOutStock ? YES : NO;
+                                    excelWorksheet.Cells[i, 6].Value = isInStock ? YES : NO;
                                     excelWorksheet.Cells[i, 6].Style.Font.Color.SetColor(Color.Red);
                                 }
 
@@ -205,9 +212,14 @@ namespace AmazonChecker
                                 var isPrime = (prime != null
                                                 && !string.IsNullOrEmpty(prime.GetProperty("checked"))
                                                 && prime.GetProperty("checked").ToLower().Equals(TRUE.ToLower())
+                                                && isInStock
                                             )
                                             ? true : false;
-
+                                if (prime != null)
+                                {
+                                    var primeNote = FindElement(XPATH_PRIME_NOTE);
+                                    excelWorksheet.Cells[i, 9].Value = primeNote.Text;
+                                }
                                 if (excelWorksheet.Cells[i, 3].Value == null || isPrime != excelWorksheet.Cells[i, 3].Value.ToString().ToLower().Equals(YES.ToLower()))
                                 {
                                     excelWorksheet.Cells[i, 3].Value = isPrime ? YES : NO;
@@ -238,59 +250,60 @@ namespace AmazonChecker
         private bool ChangeDeliverVnToUs(string productCode)
         {
             if (string.IsNullOrEmpty(productCode)) return false;
-            return new WaitHelper(TimeSpan.FromSeconds(1000)).Until(() =>
+            return new WaitHelper(TimeSpan.FromSeconds(10)).Until(() =>
             {
-                var reuslt = false;
+                var result = false;
 
                 try
                 {
                     _chromeDriver.Navigate().GoToUrl(string.Format(URL_DELIVER, productCode));
                     var deliverLocation = FindElement(XPATH_DELIVER);
-
-                    if (deliverLocation != null && !string.IsNullOrEmpty(deliverLocation.Text))
+                    while (deliverLocation == null || string.IsNullOrEmpty(deliverLocation.Text))
                     {
-                        if (deliverLocation.Text.ToLower().Contains("New York".ToLower()))
+                        deliverLocation = FindElement(XPATH_DELIVER);
+                    }
+
+                    if (deliverLocation.Text.ToLower().Contains("New York".ToLower()))
+                    {
+                        result = true;
+                    }
+                    else
+                    {
+                        deliverLocation.Click();
+                        var inputZipCode = FindElement(XPATH_ZIPCODE);
+                        while (inputZipCode == null)
                         {
-                            reuslt = true;
+                            inputZipCode = FindElement(XPATH_ZIPCODE);
                         }
-                        else
+                        inputZipCode.SendKeys("10004");
+
+                        var submitZipCode = FindElement(XPATH_SUBMIT_ZIPCODE);
+                        while (submitZipCode == null)
                         {
-                            deliverLocation.Click();
-                            var inputZipCode = FindElement(XPATH_ZIPCODE);
-                            while (inputZipCode == null)
-                            {
-                                inputZipCode = FindElement(XPATH_ZIPCODE);
-                            }
-                            inputZipCode.SendKeys("10004");
+                            submitZipCode = FindElement(XPATH_SUBMIT_ZIPCODE);
+                        }
+                        submitZipCode.Click();
 
-                            var submitZipCode = FindElement(XPATH_SUBMIT_ZIPCODE);
-                            while (submitZipCode == null)
-                            {
-                                submitZipCode = FindElement(XPATH_SUBMIT_ZIPCODE);
-                            }
-                            submitZipCode.Click();
+                        var btnCloseZipCode = FindElements(XPATH_CLOSE_ZIPCODE);
+                        while (!btnCloseZipCode.Any())
+                        {
+                            btnCloseZipCode = FindElements(XPATH_CLOSE_ZIPCODE);
+                        }
 
-                            var btnCloseZipCode = FindElements(XPATH_CLOSE_ZIPCODE);
-                            while (!btnCloseZipCode.Any())
-                            {
-                                btnCloseZipCode = FindElements(XPATH_CLOSE_ZIPCODE);
-                            }
-
-                            btnCloseZipCode.FirstOrDefault().Click();
-                            Thread.Sleep(200);
+                        btnCloseZipCode.FirstOrDefault().Click();
+                        deliverLocation = FindElement(XPATH_DELIVER);
+                        while (deliverLocation == null || string.IsNullOrEmpty(deliverLocation.Text))
+                        {
                             deliverLocation = FindElement(XPATH_DELIVER);
-                            reuslt = deliverLocation != null
-                                    && !string.IsNullOrEmpty(deliverLocation.Text)
-                                    && deliverLocation.Text.ToLower().Contains("New York".ToLower());
                         }
+                        result = deliverLocation.Text.ToLower().Contains("New York".ToLower());
                     }
                 }
                 catch
                 {
-
                 }
 
-                return reuslt;
+                return result;
             });
         }
 

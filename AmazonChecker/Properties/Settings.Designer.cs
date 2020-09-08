@@ -34,5 +34,29 @@ namespace AmazonChecker.Properties {
                 this["PathFileExcel"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LinkGoogleSheet {
+            get {
+                return ((string)(this["LinkGoogleSheet"]));
+            }
+            set {
+                this["LinkGoogleSheet"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool isRunningExcel {
+            get {
+                return ((bool)(this["isRunningExcel"]));
+            }
+            set {
+                this["isRunningExcel"] = value;
+            }
+        }
     }
 }

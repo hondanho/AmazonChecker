@@ -50,6 +50,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="CommonHelper\ChromeHelper.cs" />
+    <Compile Include="Model\SheetModel.cs" />
+    <Compile Include="Service\BaseChecker.cs" />
+    <Compile Include="Service\ExcelChecker.cs" />
+    <Compile Include="Service\GoogleSheetsChecker.cs" />
     <Compile Include="CommonHelper\Notify.cs" />
     <Compile Include="CommonHelper\WaitHelper.cs" />
     <Compile Include="Main.cs">
@@ -88,6 +93,9 @@
   <ItemGroup>
     <PackageReference Include="EPPlus">
       <Version>4.5.3.3</Version>
+    </PackageReference>
+    <PackageReference Include="Google.Apis.Sheets.v4">
+      <Version>1.49.0.2069</Version>
     </PackageReference>
     <PackageReference Include="log4net">
       <Version>2.0.9</Version>

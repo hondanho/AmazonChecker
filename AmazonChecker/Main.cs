@@ -2,10 +2,7 @@
 using AmazonChecker.Properties;
 using log4net;
 using OfficeOpenXml;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Chrome;
 using System;
-using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -39,11 +36,12 @@ namespace AmazonChecker
         private const string TRUE = "True";
         private const string NO = "No";
 
-        private ChromeDriver _chromeDriver;
+        private ChromeHelper _chromeDriver;
         private ILog _log;
         private Thread _thread;
         private bool IsRunningProcess = false;
         public delegate void LogInfo(string info);
+        private bool IsRunningExcel = false;
 
         public Main()
         {
@@ -53,34 +51,12 @@ namespace AmazonChecker
 
         private void InitSetting()
         {
-            // setting
-            this.tbLinkFileExcel.Text = (string)Settings.Default["PathFileExcel"];
             this._log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
-        }
-
-        public ChromeDriver InitWebDriver()
-        {
-            ChromeOptions chromeOptions = new ChromeOptions();
-            var service = ChromeDriverService.CreateDefaultService();
-            service.SuppressInitialDiagnosticInformation = true;
-            service.HideCommandPromptWindow = true;
-            chromeOptions.AddArguments("headless");
-            chromeOptions.AddArguments("start-maximized");
-            chromeOptions.AddArguments("--disable-notifications");
-            chromeOptions.AddArgument("--disable-blink-features=AutomationControlled");
-            chromeOptions.AddArguments("profile.default_content_setting_values.images", "2");
-            chromeOptions.AddExcludedArgument("enable-automation");
-            chromeOptions.AddAdditionalCapability("useAutomationExtension", false);
-            chromeOptions.AddUserProfilePreference("profile.password_manager_enabled", false);
-            chromeOptions.AddUserProfilePreference("credentials_enable_service", true);
-            var chromDriver = new ChromeDriver(service, chromeOptions);
-            return chromDriver;
-        }
-
-        private void SaveSetting()
-        {
-            Settings.Default["PathFileExcel"] = this.tbLinkFileExcel.Text;
-            Settings.Default.Save();
+            this.tbLinkFileExcel.Text = (string)Settings.Default["PathFileExcel"];
+            this.tbLinkGoogleSheets.Text = (string)Settings.Default["LinkGoogleSheet"];
+            this.IsRunningExcel = (bool)Settings.Default["isRunningExcel"];
+            this.tabRunning.SelectedTab = this.IsRunningExcel ? this.tabFileExcel : this.tabGoogleSheets;
+            Console.Read();
         }
 
         private void btnSelectFileExcel_Click(object sender, EventArgs e)
@@ -145,7 +121,7 @@ namespace AmazonChecker
                         {
                             // check url exist 
                             _chromeDriver.Navigate().GoToUrl(linkProduct.Text);
-                            var imgNotFoundPage = FindElement(XPATH_IMG_NOT_FOUND);
+                            var imgNotFoundPage = _chromeDriver.FindElement(XPATH_IMG_NOT_FOUND);
                             if (imgNotFoundPage != null)
                             {
                                 var altImgNotFoundPage = imgNotFoundPage.GetAttribute("alt");
@@ -163,14 +139,14 @@ namespace AmazonChecker
 
                             // column 4: price
                             var price = excelWorksheet.Cells[i, 4].Value;
-                            var price1 = FindElement(XPATH_PRICE1);
+                            var price1 = _chromeDriver.FindElement(XPATH_PRICE1);
                             if (price1 != null && !string.IsNullOrEmpty(price1.Text))
                             {
                                 price = price1.Text.Replace("$", "");
                             }
                             else
                             {
-                                var price2 = FindElement(XPATH_PRICE2);
+                                var price2 = _chromeDriver.FindElement(XPATH_PRICE2);
                                 if (price2 != null && !string.IsNullOrEmpty(price2.Text))
                                 {
                                     price = price2.Text.Replace("$", "");
@@ -190,7 +166,7 @@ namespace AmazonChecker
                             if (isChangeDeliver)
                             {
                                 //column 6: out stock
-                                var lstOutStock = FindElements(XPATH_OUT_STOCK);
+                                var lstOutStock = _chromeDriver.FindElements(XPATH_OUT_STOCK);
                                 var isInStock = false;
                                 foreach (var outStock in lstOutStock)
                                 {
@@ -208,7 +184,7 @@ namespace AmazonChecker
 
                                 //// column 3: prime
                                 _chromeDriver.Navigate().GoToUrl(string.Format(URL_PRIME, asinCode.Value));
-                                var prime = FindElement(XPATH_PRIME);
+                                var prime = _chromeDriver.FindElement(XPATH_PRIME);
                                 var isPrime = (prime != null
                                                 && !string.IsNullOrEmpty(prime.GetProperty("checked"))
                                                 && prime.GetProperty("checked").ToLower().Equals(TRUE.ToLower())
@@ -217,7 +193,7 @@ namespace AmazonChecker
                                             ? true : false;
                                 if (prime != null)
                                 {
-                                    var primeNote = FindElement(XPATH_PRIME_NOTE);
+                                    var primeNote = _chromeDriver.FindElement(XPATH_PRIME_NOTE);
                                     excelWorksheet.Cells[i, 9].Value = primeNote.Text;
                                 }
                                 if (excelWorksheet.Cells[i, 3].Value == null || isPrime != excelWorksheet.Cells[i, 3].Value.ToString().ToLower().Equals(YES.ToLower()))
@@ -242,9 +218,6 @@ namespace AmazonChecker
 
                 excelPackage.Save();
             }
-
-            Notify.Info("Hoàn thành");
-            StopProcess();
         }
 
         private bool ChangeDeliverVnToUs(string productCode)
@@ -257,10 +230,10 @@ namespace AmazonChecker
                 try
                 {
                     _chromeDriver.Navigate().GoToUrl(string.Format(URL_DELIVER, productCode));
-                    var deliverLocation = FindElement(XPATH_DELIVER);
+                    var deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
                     while (deliverLocation == null || string.IsNullOrEmpty(deliverLocation.Text))
                     {
-                        deliverLocation = FindElement(XPATH_DELIVER);
+                        deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
                     }
 
                     if (deliverLocation.Text.ToLower().Contains("New York".ToLower()))
@@ -270,31 +243,31 @@ namespace AmazonChecker
                     else
                     {
                         deliverLocation.Click();
-                        var inputZipCode = FindElement(XPATH_ZIPCODE);
+                        var inputZipCode = _chromeDriver.FindElement(XPATH_ZIPCODE);
                         while (inputZipCode == null)
                         {
-                            inputZipCode = FindElement(XPATH_ZIPCODE);
+                            inputZipCode = _chromeDriver.FindElement(XPATH_ZIPCODE);
                         }
                         inputZipCode.SendKeys("10004");
 
-                        var submitZipCode = FindElement(XPATH_SUBMIT_ZIPCODE);
+                        var submitZipCode = _chromeDriver.FindElement(XPATH_SUBMIT_ZIPCODE);
                         while (submitZipCode == null)
                         {
-                            submitZipCode = FindElement(XPATH_SUBMIT_ZIPCODE);
+                            submitZipCode = _chromeDriver.FindElement(XPATH_SUBMIT_ZIPCODE);
                         }
                         submitZipCode.Click();
 
-                        var btnCloseZipCode = FindElements(XPATH_CLOSE_ZIPCODE);
+                        var btnCloseZipCode = _chromeDriver.FindElements(XPATH_CLOSE_ZIPCODE);
                         while (!btnCloseZipCode.Any())
                         {
-                            btnCloseZipCode = FindElements(XPATH_CLOSE_ZIPCODE);
+                            btnCloseZipCode = _chromeDriver.FindElements(XPATH_CLOSE_ZIPCODE);
                         }
 
                         btnCloseZipCode.FirstOrDefault().Click();
-                        deliverLocation = FindElement(XPATH_DELIVER);
+                        deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
                         while (deliverLocation == null || string.IsNullOrEmpty(deliverLocation.Text))
                         {
-                            deliverLocation = FindElement(XPATH_DELIVER);
+                            deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
                         }
                         result = deliverLocation.Text.ToLower().Contains("New York".ToLower());
                     }
@@ -307,41 +280,9 @@ namespace AmazonChecker
             });
         }
 
-        private IWebElement FindElement(string xpath)
-        {
-            IWebElement result = null;
-            try
-            {
-                result = _chromeDriver.FindElement(By.XPath(xpath));
-            }
-            catch (Exception ex)
-            {
-            }
-
-            return result;
-        }
-
-        private List<IWebElement> FindElements(string xpath)
-        {
-            var result = new List<IWebElement>();
-            try
-            {
-                result = _chromeDriver.FindElements(By.XPath(xpath)).ToList();
-                if (result.Any())
-                {
-                    result = result.Where(x => x.Displayed).ToList();
-                }
-            }
-            catch
-            {
-            }
-
-            return result;
-        }
-
         private void StartProcess(int totalAmount)
         {
-            _chromeDriver = InitWebDriver();
+            _chromeDriver = new ChromeHelper();
             this.Invoke(new Action<int>((index) =>
             {
                 this.lbStatus.Text = string.Format("0/{0}", totalAmount);
@@ -363,9 +304,19 @@ namespace AmazonChecker
 
         private void btnRun_Click(object sender, EventArgs e)
         {
+            var isRunningExcel = this.tabRunning.SelectedTab == this.tabFileExcel;
             _thread = new Thread(() =>
             {
-                AmazonCheckProduct();
+                if (isRunningExcel)
+                {
+                    AmazonCheckProduct();
+                }
+                else
+                {
+
+                }
+                Notify.Info("Hoàn thành");
+                StopProcess();
             });
             _thread.Start();
             this.btnRun.Enabled = false;
@@ -421,7 +372,22 @@ namespace AmazonChecker
 
         private void tbLinkFileExcel_TextChanged(object sender, EventArgs e)
         {
-            SaveSetting();
+            Settings.Default["PathFileExcel"] = this.tbLinkFileExcel.Text;
+            Settings.Default.Save();
+        }
+
+        private void tbLinktbGoogleSheets_TextChanged(object sender, EventArgs e)
+        {
+            Settings.Default["LinkGoogleSheet"] = this.tbLinkGoogleSheets.Text;
+            Settings.Default.Save();
+        }
+
+        private void tabFileExccel_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            this.IsRunningExcel = this.tabRunning.SelectedTab == this.tabFileExcel;
+            Settings.Default["isRunningExcel"] = this.IsRunningExcel;
+            Settings.Default.Save();
+            this.lbEnvironmentRun.Text = "Chạy " + (this.IsRunningExcel ? this.tabFileExcel.Text : this.tabGoogleSheets.Text);
         }
     }
 }

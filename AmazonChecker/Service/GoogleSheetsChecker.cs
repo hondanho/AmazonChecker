@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource;
 using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource.GetRequest;
+using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource.UpdateRequest;
 
 namespace AmazonChecker.CommonHelper
 {
@@ -22,11 +23,7 @@ namespace AmazonChecker.CommonHelper
         private string SPREADSHEET_ID = "";
         private static string CREDENTIAL_PATH = AppDomain.CurrentDomain.BaseDirectory + "credentials.json";
         private static string TOKEN_PATH = AppDomain.CurrentDomain.BaseDirectory + "token.json";
-        private const GetRequest.ValueRenderOptionEnum VALUE_RENDER_OPTION_GET = (GetRequest.ValueRenderOptionEnum)0;
-        private const UpdateRequest.ValueInputOptionEnum VALUE_RENDER_OPTION_UPDATE = (UpdateRequest.ValueInputOptionEnum)0;
         private SheetsService _service;
-
-        public List<List<object>> _listDataSheets;
 
         public GoogleSheetsChecker(string linkGoogleSheet)
         {
@@ -57,13 +54,16 @@ namespace AmazonChecker.CommonHelper
             {
                 return result;
             }
-            // https://docs.google.com/spreadsheets/d/1dMZ-uHTSq8Q9hZRz5pyAfw6T8JxaMHpA7eqbvRpQYgQ/edit#gid=0
             this.SPREADSHEET_ID = Regex.Match(linkGoogleSheet, @"(?<=https:\/\/docs\.google\.com\/spreadsheets\/d\/)(.*)(?=\/edit)").Value;
             var request = this._service.Spreadsheets.Values.Get(this.SPREADSHEET_ID, SHEETS_NAME);
             request.MajorDimension = MajorDimensionEnum.ROWS;
             request = this._service.Spreadsheets.Values.Get(this.SPREADSHEET_ID, SHEETS_NAME);
             ValueRange response = request.Execute();
-            result = (List<List<object>>)response.Values;
+            foreach (var res in response.Values)
+            {
+                result.Add(new List<object>(res));
+            }
+
             return result;
         }
 
@@ -72,26 +72,21 @@ namespace AmazonChecker.CommonHelper
             try
             {
                 var requestBody = new ValueRange();
-                requestBody.Values = (IList<IList<object>>)this._listDataSheets;
+                requestBody.Values = new List<IList<object>>();
+                foreach (var data in this.FirstSheetDatas)
+                {
+                    requestBody.Values.Add(data);
+                }
                 var request = this._service.Spreadsheets.Values.Update(requestBody, this.SPREADSHEET_ID, SHEETS_NAME);
-                request.ValueInputOption = VALUE_RENDER_OPTION_UPDATE;
+                request.ValueInputOption = ValueInputOptionEnum.RAW;
 
                 var response = request.Execute();
                 return true;
             }
-            catch
+            catch(Exception ex)
             {
             }
             return false;
-        }
-
-        public override void UpdateCells(int i, int j, object value)
-        {
-            this._listDataSheets[i][j] = value;
-        }
-
-        public override void SetColor(int i, int j, System.Drawing.Color color)
-        {
         }
     }
 }

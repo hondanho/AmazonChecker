@@ -1,5 +1,6 @@
 ﻿using AmazonChecker.Service;
 using OfficeOpenXml;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,23 +9,11 @@ namespace AmazonChecker.CommonHelper
 {
     public class ExcelChecker : BaseChecker
     {
-        public ExcelPackage _excelPackage { get; set; }
-        public ExcelWorksheet _excelWorkSheet
-        {
-            get
-            {
-                if (this._excelPackage != null)
-                {
-                    return _excelPackage.Workbook.Worksheets.First();
-                }
-                else return null;
-            }
-            set {
-            }
-        }
+        private string pathFileExcel { get; set; }
 
         public ExcelChecker(string pathFileExcel) : base()
         {
+            this.pathFileExcel = pathFileExcel;
             this.FirstSheetDatas = GetDatasChecker(pathFileExcel);
         }
 
@@ -33,50 +22,56 @@ namespace AmazonChecker.CommonHelper
             var result = new List<List<object>>();
             if (string.IsNullOrEmpty(resourceString) || !File.Exists(resourceString))
             {
-                Notify.Warning("File không tồn tại hoặc không hợp lệ!");
                 return result;
             }
 
             FileInfo file = new FileInfo(resourceString);
 
-            this._excelPackage = new ExcelPackage(file);
-            for (int i = 1; i <= this._excelWorkSheet.Dimension.End.Row; i++)
+            using (var excelPakage = new ExcelPackage(file))
             {
-                var columns = new List<object>();
-                for (int j = this._excelWorkSheet.Dimension.Start.Column; j <= this._excelWorkSheet.Dimension.End.Column; j++)
+                var rowIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Row;
+                var rowIndexEnd = excelPakage.Workbook.Worksheets.First().Dimension.End.Row;
+                
+                for (int i = rowIndexStart; i <= rowIndexEnd; i++)
                 {
-                    columns.Add(this._excelWorkSheet.Cells[i, j].Value);
-                }
+                    var columns = new List<object>();
+                    var columnIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Column;
+                    var columnIndexEnd = excelPakage.Workbook.Worksheets.First().Dimension.End.Column;
 
-                result.Add(columns);
+                    for (int j = columnIndexStart; j <= columnIndexEnd; j++)
+                    {
+                        columns.Add(excelPakage.Workbook.Worksheets.First().Cells[i, j].Value);
+                    }
+
+                    result.Add(columns);
+                }
             }
 
             return result;
-        }
-        public override void UpdateCells(int i, int j, object value)
-        {
-            if (this._excelWorkSheet != null)
-            {
-                this._excelWorkSheet.Cells[i, j].Value = value;
-            }
-        }
-
-        public override void SetColor(int i, int j, System.Drawing.Color color)
-        {
-            if (this._excelWorkSheet != null)
-            {
-                this._excelWorkSheet.Cells[i, j].Style.Font.Color.SetColor(color);
-            }
         }
 
         public override bool Save()
         {
             try
             {
-                this._excelPackage.Save();
+                FileInfo file = new FileInfo(this.pathFileExcel);
+                using (var excelPakage = new ExcelPackage(file))
+                {
+                    var rowIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Row;
+                    for (int i = 0; i < this.FirstSheetDatas.Count; i++)
+                    {
+                        var columnIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Column;
+                        for (int j = 0; j < this.FirstSheetDatas[i].Count; j++)
+                        {
+                            excelPakage.Workbook.Worksheets.First().Cells[i + rowIndexStart, j + columnIndexStart].Value = this.FirstSheetDatas[i][j];
+                        }
+                    }
+                    excelPakage.Save();
+                }
+
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
             }
 

@@ -224,7 +224,7 @@ namespace AmazonChecker
         private bool ChangeDeliverVnToUs(string productCode)
         {
             if (string.IsNullOrEmpty(productCode)) return false;
-            return new WaitHelper(TimeSpan.FromSeconds(100)).Until(() =>
+            return new WaitHelper(TimeSpan.FromSeconds(20)).Until(() =>
             {
                 var result = false;
 
@@ -273,7 +273,7 @@ namespace AmazonChecker
                         result = deliverLocation.Text.ToLower().Contains("New York".ToLower());
                     }
                 }
-                catch
+                catch 
                 {
                 }
 

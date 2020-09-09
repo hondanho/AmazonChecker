@@ -1,25 +1,36 @@
-﻿using AmazonChecker.Model;
-using AmazonChecker.Service;
-using Google.Apis.Auth.OAuth2;
-using Google.Apis.Services;
-using Google.Apis.Sheets.v4;
-using Google.Apis.Sheets.v4.Data;
-using Google.Apis.Util.Store;
+﻿using AmazonChecker.Service;
 using OfficeOpenXml;
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
-using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource.GetRequest;
 
 namespace AmazonChecker.CommonHelper
 {
     public class ExcelChecker : BaseChecker
     {
-        public override List<List<SheetModel>> GetDatasChecker(string resourceString)
+        public ExcelPackage _excelPackage { get; set; }
+        public ExcelWorksheet _excelWorkSheet
         {
-            var result = new List<List<SheetModel>>();
+            get
+            {
+                if (this._excelPackage != null)
+                {
+                    return _excelPackage.Workbook.Worksheets.First();
+                }
+                else return null;
+            }
+            set {
+            }
+        }
+
+        public ExcelChecker(string pathFileExcel) : base()
+        {
+            this.FirstSheetDatas = GetDatasChecker(pathFileExcel);
+        }
+
+        public override List<List<object>> GetDatasChecker(string resourceString)
+        {
+            var result = new List<List<object>>();
             if (string.IsNullOrEmpty(resourceString) || !File.Exists(resourceString))
             {
                 Notify.Warning("File không tồn tại hoặc không hợp lệ!");
@@ -27,35 +38,49 @@ namespace AmazonChecker.CommonHelper
             }
 
             FileInfo file = new FileInfo(resourceString);
-            using (ExcelPackage excelPackage = new ExcelPackage(file))
+
+            this._excelPackage = new ExcelPackage(file);
+            for (int i = 1; i <= this._excelWorkSheet.Dimension.End.Row; i++)
             {
-                ExcelWorksheet excelWorksheet = excelPackage.Workbook.Worksheets.First();
-
-                for (int i = 1; i <= excelWorksheet.Dimension.End.Row; i++)
+                var columns = new List<object>();
+                for (int j = this._excelWorkSheet.Dimension.Start.Column; j <= this._excelWorkSheet.Dimension.End.Column; j++)
                 {
-                    var columns = new List<SheetModel>();
-                    for (int j = excelWorksheet.Dimension.Start.Column; j <= excelWorksheet.Dimension.End.Column; j++)
-                    {
-                        columns.Add(new SheetModel(excelWorksheet.Cells[i, 4].Value));
-                    }
-
-                    result.Add(columns);
+                    columns.Add(this._excelWorkSheet.Cells[i, j].Value);
                 }
+
+                result.Add(columns);
             }
 
             return result;
         }
-        public override void UpdateSheet(int i, int j, object value)
+        public override void UpdateCells(int i, int j, object value)
         {
-            this.ListDataChecker[i][j].Value = value;
+            if (this._excelWorkSheet != null)
+            {
+                this._excelWorkSheet.Cells[i, j].Value = value;
+            }
         }
+
         public override void SetColor(int i, int j, System.Drawing.Color color)
         {
-            this.ListDataChecker[i][j].Color = color;
+            if (this._excelWorkSheet != null)
+            {
+                this._excelWorkSheet.Cells[i, j].Style.Font.Color.SetColor(color);
+            }
         }
 
         public override bool Save()
         {
+            try
+            {
+                this._excelPackage.Save();
+                return true;
+            }
+            catch
+            {
+            }
+
+            return false;
         }
     }
 }

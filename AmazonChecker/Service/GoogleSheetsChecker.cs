@@ -1,4 +1,5 @@
-﻿using Google.Apis.Auth.OAuth2;
+﻿using AmazonChecker.Service;
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
@@ -6,23 +7,28 @@ using Google.Apis.Util.Store;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
+using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource;
 using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource.GetRequest;
 
 namespace AmazonChecker.CommonHelper
 {
-    public class GoogleSheetsChecker
+    public class GoogleSheetsChecker: BaseChecker
     {
         private static string[] Scopes = { SheetsService.Scope.Spreadsheets };
         private const string APPLICATION_NAME = "AmazonChecker";
         private const string SHEETS_NAME = "Products";
-
-        private const string SPREADSHEET_ID = "1dMZ-uHTSq8Q9hZRz5pyAfw6T8JxaMHpA7eqbvRpQYgQ";
-        
+        private string SPREADSHEET_ID = "";
         private static string CREDENTIAL_PATH = AppDomain.CurrentDomain.BaseDirectory + "credentials.json";
         private static string TOKEN_PATH = AppDomain.CurrentDomain.BaseDirectory + "token.json";
+        private const GetRequest.ValueRenderOptionEnum VALUE_RENDER_OPTION_GET = (GetRequest.ValueRenderOptionEnum)0;
+        private const UpdateRequest.ValueInputOptionEnum VALUE_RENDER_OPTION_UPDATE = (UpdateRequest.ValueInputOptionEnum)0;
+        private SheetsService _service;
 
-        public static void Execute()
+        public List<List<object>> _listDataSheets;
+
+        public GoogleSheetsChecker(string linkGoogleSheet)
         {
             UserCredential credential;
             using (var stream = new FileStream(CREDENTIAL_PATH, FileMode.Open, FileAccess.Read))
@@ -35,31 +41,57 @@ namespace AmazonChecker.CommonHelper
                     new FileDataStore(TOKEN_PATH, true)).Result;
             }
 
-            var service = new SheetsService(new BaseClientService.Initializer()
+            this._service = new SheetsService(new BaseClientService.Initializer()
             {
                 HttpClientInitializer = credential,
                 ApplicationName = APPLICATION_NAME,
             });
 
-            SpreadsheetsResource.ValuesResource.GetRequest request =
-                    service.Spreadsheets.Values.Get(SPREADSHEET_ID, SHEETS_NAME);
+            this.FirstSheetDatas = GetDatasChecker(linkGoogleSheet);
+        }
+
+        public override List<List<object>> GetDatasChecker(string linkGoogleSheet)
+        {
+            var result = new List<List<object>>();
+            if (string.IsNullOrEmpty(linkGoogleSheet))
+            {
+                return result;
+            }
+            // https://docs.google.com/spreadsheets/d/1dMZ-uHTSq8Q9hZRz5pyAfw6T8JxaMHpA7eqbvRpQYgQ/edit#gid=0
+            this.SPREADSHEET_ID = Regex.Match(linkGoogleSheet, @"(?<=https:\/\/docs\.google\.com\/spreadsheets\/d\/)(.*)(?=\/edit)").Value;
+            var request = this._service.Spreadsheets.Values.Get(this.SPREADSHEET_ID, SHEETS_NAME);
             request.MajorDimension = MajorDimensionEnum.ROWS;
-
-
+            request = this._service.Spreadsheets.Values.Get(this.SPREADSHEET_ID, SHEETS_NAME);
             ValueRange response = request.Execute();
-            IList<IList<Object>> values = response.Values;
-            if (values != null && values.Count > 0)
+            result = (List<List<object>>)response.Values;
+            return result;
+        }
+
+        public override bool Save()
+        {
+            try
             {
-                Console.WriteLine("Name, Major");
-                foreach (var row in values)
-                {
-                    Console.WriteLine("{0}, {1}", row[0], row[4]);
-                }
+                var requestBody = new ValueRange();
+                requestBody.Values = (IList<IList<object>>)this._listDataSheets;
+                var request = this._service.Spreadsheets.Values.Update(requestBody, this.SPREADSHEET_ID, SHEETS_NAME);
+                request.ValueInputOption = VALUE_RENDER_OPTION_UPDATE;
+
+                var response = request.Execute();
+                return true;
             }
-            else
+            catch
             {
-                Console.WriteLine("No data found.");
             }
+            return false;
+        }
+
+        public override void UpdateCells(int i, int j, object value)
+        {
+            this._listDataSheets[i][j] = value;
+        }
+
+        public override void SetColor(int i, int j, System.Drawing.Color color)
+        {
         }
     }
 }

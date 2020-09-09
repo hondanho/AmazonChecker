@@ -51,6 +51,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CommonHelper\ChromeHelper.cs" />
+    <Compile Include="CommonHelper\Extensions.cs" />
     <Compile Include="Model\SheetModel.cs" />
     <Compile Include="Service\BaseChecker.cs" />
     <Compile Include="Service\ExcelChecker.cs" />

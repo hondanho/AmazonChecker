@@ -1,7 +1,9 @@
 ﻿using AmazonChecker.CommonHelper;
 using AmazonChecker.Properties;
+using AmazonChecker.Service;
 using log4net;
 using OfficeOpenXml;
+using OpenQA.Selenium.Chrome;
 using System;
 using System.Drawing;
 using System.IO;
@@ -36,7 +38,7 @@ namespace AmazonChecker
         private const string TRUE = "True";
         private const string NO = "No";
 
-        private ChromeHelper _chromeDriver;
+        private ChromeDriver _chromeDriver;
         private ILog _log;
         private Thread _thread;
         private bool IsRunningProcess = false;
@@ -87,41 +89,33 @@ namespace AmazonChecker
             }
         }
 
-        public void AmazonCheckProduct()
+        public void AmazonCheckProduct(BaseChecker baseChecker)
         {
-            //Create a test file
-            if (string.IsNullOrEmpty(this.tbLinkFileExcel.Text) || !File.Exists(this.tbLinkFileExcel.Text))
+            if (baseChecker != null)
             {
-                Notify.Warning("File không tồn tại hoặc không hợp lệ!");
-                return;
-            }
-
-            FileInfo file = new FileInfo(this.tbLinkFileExcel.Text);
-            using (ExcelPackage excelPackage = new ExcelPackage(file))
-            {
-                ExcelWorksheet excelWorksheet = excelPackage.Workbook.Worksheets.First();
-
-                var totalRecode = excelWorksheet.Dimension.End.Row;
-                StartProcess(totalRecode - 1);
+                var totalRecord = baseChecker.FirstSheetDatas.Count - 1;
+                StartProcess(totalRecord);
                 var isChangeDeliver = false;
 
-                for (int i = 2; i <= totalRecode; i++)
+                for (int i = 1; i <= totalRecord; i++)
                 {
+                    var row = baseChecker.FirstSheetDatas[i];
+
                     try
                     {
                         // column 2: link product
-                        var linkProduct = excelWorksheet.Cells[i, 2];
-                        var asinCode = excelWorksheet.Cells[i, 1];
+                        var linkProduct = row[1]?.ToString();
+                        var asinCode = row[0]?.ToString();
 
-                        if (asinCode == null || string.IsNullOrEmpty(linkProduct.Text) || !(Uri.IsWellFormedUriString(linkProduct.Text, UriKind.Absolute)))
+                        if (asinCode == null || string.IsNullOrEmpty(linkProduct) || !(Uri.IsWellFormedUriString(linkProduct, UriKind.Absolute)))
                         {
                             throw new Exception("\"Không có mã sản phẩm\" or \"không tồn tại link sản phẩm\" or \"Link sản phẩm không hơp lệ\"");
                         }
                         else
                         {
                             // check url exist 
-                            _chromeDriver.Navigate().GoToUrl(linkProduct.Text);
-                            var imgNotFoundPage = _chromeDriver.FindElement(XPATH_IMG_NOT_FOUND);
+                            _chromeDriver.Navigate().GoToUrl(linkProduct);
+                            var imgNotFoundPage = _chromeDriver.FindWebElement(XPATH_IMG_NOT_FOUND);
                             if (imgNotFoundPage != null)
                             {
                                 var altImgNotFoundPage = imgNotFoundPage.GetAttribute("alt");
@@ -132,41 +126,48 @@ namespace AmazonChecker
                                 }
                             }
 
-                            for (int j = excelWorksheet.Dimension.Start.Column; j <= excelWorksheet.Dimension.End.Column; j++)
-                            {
-                                excelWorksheet.Cells[i, j].Style.Font.Color.SetColor(Color.Black);
-                            }
+                            //if (this.IsRunningExcel)
+                            //{
+                            //    foreach (var colum in row)
+                            //    {
+
+                            //    }
+                            //    for (int j = data; j <= excelWorksheet.Dimension.End.Column; j++)
+                            //    {
+                            //        excelWorksheet.Cells[i, j].Style.Font.Color.SetColor(Color.Black);
+                            //    }
+                            //}
 
                             // column 4: price
-                            var price = excelWorksheet.Cells[i, 4].Value;
-                            var price1 = _chromeDriver.FindElement(XPATH_PRICE1);
+                            var price = row[3]?.ToString();
+                            var price1 = _chromeDriver.FindWebElement(XPATH_PRICE1);
                             if (price1 != null && !string.IsNullOrEmpty(price1.Text))
                             {
                                 price = price1.Text.Replace("$", "");
                             }
                             else
                             {
-                                var price2 = _chromeDriver.FindElement(XPATH_PRICE2);
+                                var price2 = _chromeDriver.FindWebElement(XPATH_PRICE2);
                                 if (price2 != null && !string.IsNullOrEmpty(price2.Text))
                                 {
                                     price = price2.Text.Replace("$", "");
                                 }
                             }
-                            if (excelWorksheet.Cells[i, 4].Value == null || price == null || !price.ToString().Equals(excelWorksheet.Cells[i, 4].Value.ToString()))
+                            if (row[3] == null || price == null || !price.ToString().Equals(row[3]?.ToString()))
                             {
-                                excelWorksheet.Cells[i, 4].Value = price;
-                                excelWorksheet.Cells[i, 4].Style.Font.Color.SetColor(Color.Red);
+                                row[3] = price;
+                                //excelWorksheet.Cells[i, 4].Style.Font.Color.SetColor(Color.Red);
                             }
 
                             if (!isChangeDeliver)
                             {
-                                isChangeDeliver = ChangeDeliverVnToUs(asinCode.Text);
+                                isChangeDeliver = ChangeDeliverVnToUs(asinCode);
                             }
 
                             if (isChangeDeliver)
                             {
                                 //column 6: out stock
-                                var lstOutStock = _chromeDriver.FindElements(XPATH_OUT_STOCK);
+                                var lstOutStock = _chromeDriver.FindWebElements(XPATH_OUT_STOCK);
                                 var isInStock = false;
                                 foreach (var outStock in lstOutStock)
                                 {
@@ -176,15 +177,15 @@ namespace AmazonChecker
                                         break;
                                     }
                                 }
-                                if (excelWorksheet.Cells[i, 6].Value == null || isInStock != excelWorksheet.Cells[i, 6].Value.ToString().ToLower().Equals(YES.ToLower()))
+                                if (row[5] == null || isInStock != row[5]?.ToString().ToLower().Equals(YES.ToLower()))
                                 {
-                                    excelWorksheet.Cells[i, 6].Value = isInStock ? YES : NO;
-                                    excelWorksheet.Cells[i, 6].Style.Font.Color.SetColor(Color.Red);
+                                    row[5] = isInStock ? YES : NO;
+                                    //excelWorksheet.Cells[i, 6].Style.Font.Color.SetColor(Color.Red);
                                 }
 
                                 //// column 3: prime
-                                _chromeDriver.Navigate().GoToUrl(string.Format(URL_PRIME, asinCode.Value));
-                                var prime = _chromeDriver.FindElement(XPATH_PRIME);
+                                _chromeDriver.Navigate().GoToUrl(string.Format(URL_PRIME, asinCode));
+                                var prime = _chromeDriver.FindWebElement(XPATH_PRIME);
                                 var isPrime = (prime != null
                                                 && !string.IsNullOrEmpty(prime.GetProperty("checked"))
                                                 && prime.GetProperty("checked").ToLower().Equals(TRUE.ToLower())
@@ -193,13 +194,13 @@ namespace AmazonChecker
                                             ? true : false;
                                 if (prime != null)
                                 {
-                                    var primeNote = _chromeDriver.FindElement(XPATH_PRIME_NOTE);
-                                    excelWorksheet.Cells[i, 9].Value = primeNote.Text;
+                                    var primeNote = _chromeDriver.FindWebElement(XPATH_PRIME_NOTE);
+                                    row[8] = primeNote.Text;
                                 }
-                                if (excelWorksheet.Cells[i, 3].Value == null || isPrime != excelWorksheet.Cells[i, 3].Value.ToString().ToLower().Equals(YES.ToLower()))
+                                if (row[2] == null || isPrime != row[2].ToString().ToLower().Equals(YES.ToLower()))
                                 {
-                                    excelWorksheet.Cells[i, 3].Value = isPrime ? YES : NO;
-                                    excelWorksheet.Cells[i, 3].Style.Font.Color.SetColor(Color.Red);
+                                    row[2] = isPrime ? YES : NO;
+                                    //excelWorksheet.Cells[i, 3].Style.Font.Color.SetColor(Color.Red);
                                 }
                             }
                             else
@@ -213,27 +214,27 @@ namespace AmazonChecker
                         _log.Error(ex.Message);
                     }
 
-                    UpdateProcessStatus(i - 1, totalRecode - 1);
+                    UpdateProcessStatus(i, totalRecord);
                 }
 
-                excelPackage.Save();
+                baseChecker.Save();
             }
         }
 
         private bool ChangeDeliverVnToUs(string productCode)
         {
             if (string.IsNullOrEmpty(productCode)) return false;
-            return new WaitHelper(TimeSpan.FromSeconds(10)).Until(() =>
+            return new WaitHelper(TimeSpan.FromSeconds(100)).Until(() =>
             {
                 var result = false;
 
                 try
                 {
                     _chromeDriver.Navigate().GoToUrl(string.Format(URL_DELIVER, productCode));
-                    var deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
+                    var deliverLocation = _chromeDriver.FindWebElement(XPATH_DELIVER);
                     while (deliverLocation == null || string.IsNullOrEmpty(deliverLocation.Text))
                     {
-                        deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
+                        deliverLocation = _chromeDriver.FindWebElement(XPATH_DELIVER);
                     }
 
                     if (deliverLocation.Text.ToLower().Contains("New York".ToLower()))
@@ -243,31 +244,31 @@ namespace AmazonChecker
                     else
                     {
                         deliverLocation.Click();
-                        var inputZipCode = _chromeDriver.FindElement(XPATH_ZIPCODE);
+                        var inputZipCode = _chromeDriver.FindWebElement(XPATH_ZIPCODE);
                         while (inputZipCode == null)
                         {
-                            inputZipCode = _chromeDriver.FindElement(XPATH_ZIPCODE);
+                            inputZipCode = _chromeDriver.FindWebElement(XPATH_ZIPCODE);
                         }
                         inputZipCode.SendKeys("10004");
 
-                        var submitZipCode = _chromeDriver.FindElement(XPATH_SUBMIT_ZIPCODE);
+                        var submitZipCode = _chromeDriver.FindWebElement(XPATH_SUBMIT_ZIPCODE);
                         while (submitZipCode == null)
                         {
-                            submitZipCode = _chromeDriver.FindElement(XPATH_SUBMIT_ZIPCODE);
+                            submitZipCode = _chromeDriver.FindWebElement(XPATH_SUBMIT_ZIPCODE);
                         }
                         submitZipCode.Click();
 
-                        var btnCloseZipCode = _chromeDriver.FindElements(XPATH_CLOSE_ZIPCODE);
+                        var btnCloseZipCode = _chromeDriver.FindWebElements(XPATH_CLOSE_ZIPCODE);
                         while (!btnCloseZipCode.Any())
                         {
-                            btnCloseZipCode = _chromeDriver.FindElements(XPATH_CLOSE_ZIPCODE);
+                            btnCloseZipCode = _chromeDriver.FindWebElements(XPATH_CLOSE_ZIPCODE);
                         }
 
                         btnCloseZipCode.FirstOrDefault().Click();
-                        deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
+                        deliverLocation = _chromeDriver.FindWebElement(XPATH_DELIVER);
                         while (deliverLocation == null || string.IsNullOrEmpty(deliverLocation.Text))
                         {
-                            deliverLocation = _chromeDriver.FindElement(XPATH_DELIVER);
+                            deliverLocation = _chromeDriver.FindWebElement(XPATH_DELIVER);
                         }
                         result = deliverLocation.Text.ToLower().Contains("New York".ToLower());
                     }
@@ -282,7 +283,7 @@ namespace AmazonChecker
 
         private void StartProcess(int totalAmount)
         {
-            _chromeDriver = new ChromeHelper();
+            _chromeDriver = ChromeHelper.InitWebDriver();
             this.Invoke(new Action<int>((index) =>
             {
                 this.lbStatus.Text = string.Format("0/{0}", totalAmount);
@@ -305,16 +306,19 @@ namespace AmazonChecker
         private void btnRun_Click(object sender, EventArgs e)
         {
             var isRunningExcel = this.tabRunning.SelectedTab == this.tabFileExcel;
+            BaseChecker baseChecker;
+
             _thread = new Thread(() =>
             {
                 if (isRunningExcel)
                 {
-                    AmazonCheckProduct();
+                    baseChecker = new ExcelChecker(this.tbLinkFileExcel.Text);
                 }
                 else
                 {
-
+                    baseChecker = new GoogleSheetsChecker(this.tbLinkGoogleSheets.Text);
                 }
+                AmazonCheckProduct(baseChecker);
                 Notify.Info("Hoàn thành");
                 StopProcess();
             });

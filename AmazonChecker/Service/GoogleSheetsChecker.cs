@@ -1,15 +1,17 @@
-﻿using AmazonChecker.Service;
+﻿using AmazonChecker.Model;
+using AmazonChecker.Service;
+using Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
-using Google.Apis.Util.Store;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Text.RegularExpressions;
-using System.Threading;
-using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource;
 using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource.GetRequest;
 using static Google.Apis.Sheets.v4.SpreadsheetsResource.ValuesResource.UpdateRequest;
 
@@ -18,8 +20,8 @@ namespace AmazonChecker.CommonHelper
     public class GoogleSheetsChecker: BaseChecker
     {
         private static string[] Scopes = { SheetsService.Scope.Spreadsheets };
-        private const string APPLICATION_NAME = "AmazonChecker";
-        private const string SHEETS_NAME = "Products";
+        private const string APPLICATION_NAME = "Quickstart";
+        private string SHEETS_NAME = "";
         private string SPREADSHEET_ID = "";
         private static string CREDENTIAL_PATH = AppDomain.CurrentDomain.BaseDirectory + "credentials.json";
         private static string TOKEN_PATH = AppDomain.CurrentDomain.BaseDirectory + "token.json";
@@ -27,22 +29,50 @@ namespace AmazonChecker.CommonHelper
 
         public GoogleSheetsChecker(string linkGoogleSheet)
         {
-            UserCredential credential;
-            using (var stream = new FileStream(CREDENTIAL_PATH, FileMode.Open, FileAccess.Read))
+            if (!File.Exists(CREDENTIAL_PATH))
             {
-                credential = GoogleWebAuthorizationBroker.AuthorizeAsync(
-                    GoogleClientSecrets.Load(stream).Secrets,
-                    Scopes,
-                    "user",
-                    CancellationToken.None,
-                    new FileDataStore(TOKEN_PATH, true)).Result;
+                throw new Exception($"File credentials.json không tồn tại. Hãy copy file  credentials.json vào folder: \"{AppDomain.CurrentDomain.BaseDirectory}\"");
             }
-
-            this._service = new SheetsService(new BaseClientService.Initializer()
+            try
             {
-                HttpClientInitializer = credential,
-                ApplicationName = APPLICATION_NAME,
-            });
+                //UserCredential credential;
+                //using (var stream = new FileStream(CREDENTIAL_PATH, FileMode.Open, FileAccess.Read))
+                //{
+                //    credential = GoogleWebAuthorizationBroker.AuthorizeAsync(
+                //        GoogleClientSecrets.Load(stream).Secrets,
+                //        Scopes,
+                //        "user",
+                //        CancellationToken.None,
+                //        new FileDataStore(TOKEN_PATH, true)).Result;
+                //}
+
+                DefaultContractResolver contractResolver = new DefaultContractResolver
+                {
+                    NamingStrategy = new SnakeCaseNamingStrategy()
+                };
+                var json = File.ReadAllText(CREDENTIAL_PATH);
+                var cr = JsonConvert.DeserializeObject<PersonalServiceAccountCred>(json, new JsonSerializerSettings
+                {
+                    ContractResolver = contractResolver,
+                    Formatting = Formatting.Indented
+                });
+
+                // Create an explicit ServiceAccountCredential credential
+                var xCred = new ServiceAccountCredential(new ServiceAccountCredential.Initializer(cr.ClientEmail)
+                {
+                    Scopes = Scopes
+                }.FromPrivateKey(cr.PrivateKey));
+
+                this._service = new SheetsService(new BaseClientService.Initializer()
+                {
+                    HttpClientInitializer = xCred,
+                    ApplicationName = APPLICATION_NAME,
+                });
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"File credentials.json không hợp lệ. Hãy thay file credentials.json vào folder: \"{AppDomain.CurrentDomain.BaseDirectory}\"", ex);
+            }
 
             this.FirstSheetDatas = GetDatasChecker(linkGoogleSheet);
         }
@@ -50,18 +80,41 @@ namespace AmazonChecker.CommonHelper
         public override List<List<object>> GetDatasChecker(string linkGoogleSheet)
         {
             var result = new List<List<object>>();
-            if (string.IsNullOrEmpty(linkGoogleSheet))
+            try
             {
-                return result;
+                this.SPREADSHEET_ID = Regex.Match(linkGoogleSheet, @"(?<=https:\/\/docs\.google\.com\/spreadsheets\/d\/)(.*)(?=\/edit)").Value;
+                if (string.IsNullOrEmpty(linkGoogleSheet) || string.IsNullOrEmpty(this.SPREADSHEET_ID))
+                {
+                    return result;
+                }
+
+                var requestSheetName = this._service.Spreadsheets.Get(this.SPREADSHEET_ID);
+                var resSheetName = requestSheetName.Execute();
+                if (resSheetName != null)
+                {
+                    this.SHEETS_NAME = resSheetName.Sheets[0].Properties.Title;
+                    var request = this._service.Spreadsheets.Values.Get(this.SPREADSHEET_ID, SHEETS_NAME);
+                    request.MajorDimension = MajorDimensionEnum.ROWS;
+
+                    ValueRange response = request.Execute();
+                    foreach (var res in response.Values)
+                    {
+                        result.Add(new List<object>(res));
+                    }
+                }
             }
-            this.SPREADSHEET_ID = Regex.Match(linkGoogleSheet, @"(?<=https:\/\/docs\.google\.com\/spreadsheets\/d\/)(.*)(?=\/edit)").Value;
-            var request = this._service.Spreadsheets.Values.Get(this.SPREADSHEET_ID, SHEETS_NAME);
-            request.MajorDimension = MajorDimensionEnum.ROWS;
-            request = this._service.Spreadsheets.Values.Get(this.SPREADSHEET_ID, SHEETS_NAME);
-            ValueRange response = request.Execute();
-            foreach (var res in response.Values)
+            catch (Exception ex)
             {
-                result.Add(new List<object>(res));
+                if (ex is GoogleApiException)
+                {
+                    var e = (GoogleApiException)ex;
+                    if (e.Error.Code == (int)HttpStatusCode.Forbidden)
+                    {
+                        throw new Exception("Không có quyền đọc ghi vào file google sheets này", e);
+                    }
+                }
+
+                throw new Exception(ex.Message);
             }
 
             return result;
@@ -85,8 +138,8 @@ namespace AmazonChecker.CommonHelper
             }
             catch(Exception ex)
             {
+                throw new Exception("Lưu data vào google sheet bị lỗi, hãy thử lại sau.", ex);
             }
-            return false;
         }
     }
 }

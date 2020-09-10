@@ -4,14 +4,17 @@ namespace AmazonChecker.CommonHelper
 {
     public static class ChromeHelper
     {
-        public static ChromeDriver InitWebDriver()
+        public static ChromeDriver InitWebDriver(bool isHideBrowser)
         {
             ChromeOptions chromeOptions = new ChromeOptions();
             ChromeDriverService service = ChromeDriverService.CreateDefaultService();
             service.SuppressInitialDiagnosticInformation = true;
             service.HideCommandPromptWindow = true;
-            //chromeOptions.AddArguments("headless");
-            //chromeOptions.AddArguments("start-maximized");
+            if (isHideBrowser)
+            {
+                chromeOptions.AddArguments("headless");
+                chromeOptions.AddArguments("start-maximized");
+            }
             chromeOptions.AddArguments("--disable-notifications");
             chromeOptions.AddArgument("--disable-blink-features=AutomationControlled");
             chromeOptions.AddArguments("profile.default_content_setting_values.images", "2");

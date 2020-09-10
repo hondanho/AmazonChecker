@@ -50,12 +50,24 @@ namespace AmazonChecker.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("False")]
-        public bool isRunningExcel {
+        public bool IsRunningExcel {
             get {
-                return ((bool)(this["isRunningExcel"]));
+                return ((bool)(this["IsRunningExcel"]));
             }
             set {
-                this["isRunningExcel"] = value;
+                this["IsRunningExcel"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool IsShowBrowser {
+            get {
+                return ((bool)(this["IsShowBrowser"]));
+            }
+            set {
+                this["IsShowBrowser"] = value;
             }
         }
     }

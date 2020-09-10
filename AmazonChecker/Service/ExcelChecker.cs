@@ -20,34 +20,42 @@ namespace AmazonChecker.CommonHelper
         public override List<List<object>> GetDatasChecker(string resourceString)
         {
             var result = new List<List<object>>();
-            if (string.IsNullOrEmpty(resourceString) || !File.Exists(resourceString))
-            {
-                return result;
-            }
 
-            FileInfo file = new FileInfo(resourceString);
-
-            using (var excelPakage = new ExcelPackage(file))
+            try
             {
-                var rowIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Row;
-                var rowIndexEnd = excelPakage.Workbook.Worksheets.First().Dimension.End.Row;
-                
-                for (int i = rowIndexStart; i <= rowIndexEnd; i++)
+                if (string.IsNullOrEmpty(resourceString) || !File.Exists(resourceString))
                 {
-                    var columns = new List<object>();
-                    var columnIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Column;
-                    var columnIndexEnd = excelPakage.Workbook.Worksheets.First().Dimension.End.Column;
+                    return result;
+                }
 
-                    for (int j = columnIndexStart; j <= columnIndexEnd; j++)
+                FileInfo file = new FileInfo(resourceString);
+
+                using (var excelPakage = new ExcelPackage(file))
+                {
+                    var rowIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Row;
+                    var rowIndexEnd = excelPakage.Workbook.Worksheets.First().Dimension.End.Row;
+
+                    for (int i = rowIndexStart; i <= rowIndexEnd; i++)
                     {
-                        columns.Add(excelPakage.Workbook.Worksheets.First().Cells[i, j].Value);
-                    }
+                        var columns = new List<object>();
+                        var columnIndexStart = excelPakage.Workbook.Worksheets.First().Dimension.Start.Column;
+                        var columnIndexEnd = excelPakage.Workbook.Worksheets.First().Dimension.End.Column;
 
-                    result.Add(columns);
+                        for (int j = columnIndexStart; j <= columnIndexEnd; j++)
+                        {
+                            columns.Add(excelPakage.Workbook.Worksheets.First().Cells[i, j].Value);
+                        }
+
+                        result.Add(columns);
+                    }
+                    return result;
                 }
             }
+            catch (Exception)
+            {
 
-            return result;
+                throw new Exception("Lỗi không đọc được email");
+            }
         }
 
         public override bool Save()
@@ -71,11 +79,10 @@ namespace AmazonChecker.CommonHelper
 
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
+                return false;
             }
-
-            return false;
         }
     }
 }

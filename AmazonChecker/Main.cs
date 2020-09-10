@@ -49,6 +49,8 @@ namespace AmazonChecker
         {
             InitializeComponent();
             InitSetting();
+            this.lblStatus.Text = string.Empty;
+            this.lblEnvironmentRun.Text = string.Empty;
         }
 
         private void InitSetting()
@@ -56,9 +58,10 @@ namespace AmazonChecker
             this._log = LogManager.GetLogger(MethodBase.GetCurrentMethod().DeclaringType);
             this.tbLinkFileExcel.Text = (string)Settings.Default["PathFileExcel"];
             this.tbLinkGoogleSheets.Text = (string)Settings.Default["LinkGoogleSheet"];
-            this.IsRunningExcel = (bool)Settings.Default["isRunningExcel"];
+            this.IsRunningExcel = (bool)Settings.Default["IsRunningExcel"];
+            this.cbHideBrowser.Checked = (bool)Settings.Default["IsShowBrowser"];
             this.tabRunning.SelectedTab = this.IsRunningExcel ? this.tabFileExcel : this.tabGoogleSheets;
-            Console.Read();
+            this.lblEnvironmentRun.Text = "Chạy " + (this.IsRunningExcel ? this.tabFileExcel.Text : this.tabGoogleSheets.Text);
         }
 
         private void btnSelectFileExcel_Click(object sender, EventArgs e)
@@ -89,7 +92,7 @@ namespace AmazonChecker
             }
         }
 
-        public void AmazonCheckProduct(BaseChecker baseChecker)
+        public bool AmazonCheckProduct(BaseChecker baseChecker)
         {
             if (baseChecker != null)
             {
@@ -167,6 +170,7 @@ namespace AmazonChecker
                             if (isChangeDeliver)
                             {
                                 //column 6: out stock
+                                _chromeDriver.Navigate().GoToUrl(linkProduct);
                                 var lstOutStock = _chromeDriver.FindWebElements(XPATH_OUT_STOCK);
                                 var isInStock = false;
                                 foreach (var outStock in lstOutStock)
@@ -195,6 +199,10 @@ namespace AmazonChecker
                                 if (prime != null)
                                 {
                                     var primeNote = _chromeDriver.FindWebElement(XPATH_PRIME_NOTE);
+                                    while(row.Count < 9)
+                                    {
+                                        row.Add(new object());
+                                    }
                                     row[8] = primeNote.Text;
                                 }
                                 if (row[2] == null || isPrime != row[2].ToString().ToLower().Equals(YES.ToLower()))
@@ -217,8 +225,10 @@ namespace AmazonChecker
                     UpdateProcessStatus(i, totalRecord);
                 }
 
-                baseChecker.Save();
+               return baseChecker.Save();
             }
+
+            return false;
         }
 
         private bool ChangeDeliverVnToUs(string productCode)
@@ -249,6 +259,7 @@ namespace AmazonChecker
                         {
                             inputZipCode = _chromeDriver.FindWebElement(XPATH_ZIPCODE);
                         }
+                        Thread.Sleep(200);
                         inputZipCode.SendKeys("10004");
 
                         var submitZipCode = _chromeDriver.FindWebElement(XPATH_SUBMIT_ZIPCODE);
@@ -256,6 +267,7 @@ namespace AmazonChecker
                         {
                             submitZipCode = _chromeDriver.FindWebElement(XPATH_SUBMIT_ZIPCODE);
                         }
+                        Thread.Sleep(200);
                         submitZipCode.Click();
 
                         var btnCloseZipCode = _chromeDriver.FindWebElements(XPATH_CLOSE_ZIPCODE);
@@ -264,6 +276,7 @@ namespace AmazonChecker
                             btnCloseZipCode = _chromeDriver.FindWebElements(XPATH_CLOSE_ZIPCODE);
                         }
 
+                        Thread.Sleep(200);
                         btnCloseZipCode.FirstOrDefault().Click();
                         deliverLocation = _chromeDriver.FindWebElement(XPATH_DELIVER);
                         while (deliverLocation == null || string.IsNullOrEmpty(deliverLocation.Text))
@@ -273,8 +286,9 @@ namespace AmazonChecker
                         result = deliverLocation.Text.ToLower().Contains("New York".ToLower());
                     }
                 }
-                catch 
+                catch (Exception ex)
                 {
+                    _log.Error(ex.Message);
                 }
 
                 return result;
@@ -283,10 +297,10 @@ namespace AmazonChecker
 
         private void StartProcess(int totalAmount)
         {
-            _chromeDriver = ChromeHelper.InitWebDriver();
+            _chromeDriver = ChromeHelper.InitWebDriver(this.cbHideBrowser.Checked);
             this.Invoke(new Action<int>((index) =>
             {
-                this.lbStatus.Text = string.Format("0/{0}", totalAmount);
+                this.lblStatus.Text = string.Format("0/{0}", totalAmount);
                 this.progressStatus.Maximum = index;
                 this.progressStatus.Minimum = 0;
                 this.progressStatus.Value = 0;
@@ -298,7 +312,7 @@ namespace AmazonChecker
         {
             this.Invoke(new Action<int, int>((i, j) =>
             {
-                this.lbStatus.Text = string.Format("{0}/{1}", i, j);
+                this.lblStatus.Text = string.Format("{0}/{1}", i, j);
                 this.progressStatus.Value = i;
             }), amount, totalAmount);
         }
@@ -308,27 +322,57 @@ namespace AmazonChecker
             var isRunningExcel = this.tabRunning.SelectedTab == this.tabFileExcel;
             BaseChecker baseChecker;
 
+            var messageError = isRunningExcel ? (string.IsNullOrEmpty(this.tbLinkFileExcel.Text) ? "File không hợp lệ hoặc không tồn tại":"")
+                                               : (string.IsNullOrEmpty(this.tbLinkGoogleSheets.Text) ? "Link google sheets không được trống" : ""); 
+            if (!string.IsNullOrEmpty(messageError))
+            {
+                Notify.Warning(messageError);
+                return;
+            }
             _thread = new Thread(() =>
             {
-                if (isRunningExcel)
+                try
                 {
-                    baseChecker = new ExcelChecker(this.tbLinkFileExcel.Text);
+                    if (isRunningExcel)
+                    {
+                        baseChecker = new ExcelChecker(this.tbLinkFileExcel.Text);
+                    }
+                    else
+                    {
+                        baseChecker = new GoogleSheetsChecker(this.tbLinkGoogleSheets.Text);
+                    }
+                    if (AmazonCheckProduct(baseChecker))
+                    {
+                        Notify.Info("Hoàn thành");
+                    }
+                    else
+                    {
+                        Notify.Warning("Thất bại");
+                    }
                 }
-                else
+                catch (ThreadAbortException ex)
                 {
-                    baseChecker = new GoogleSheetsChecker(this.tbLinkGoogleSheets.Text);
+                    _log.Error(ex.Message);
                 }
-                AmazonCheckProduct(baseChecker);
-                Notify.Info("Hoàn thành");
-                StopProcess();
+                catch (Exception ex)
+                {
+                    _log.Error(ex.Message);
+                    Notify.Warning(ex.Message);
+                }
+                finally
+                {
+                    StopProcess();
+                }
             });
             _thread.Start();
             this.btnRun.Enabled = false;
             this.btnRun.Text = "Running..";
             this.btnStop.Enabled = true;
             this.IsRunningProcess = true;
+            this.tabRunning.Enabled = true;
+            this.cbHideBrowser.Enabled = true;
+            this.lblEnvironmentRun.Text = "Chạy " + (this.IsRunningExcel ? this.tabFileExcel.Text : this.tabGoogleSheets.Text);
         }
-
 
         private void FormAmazonChecker_FormClosing(object sender, FormClosingEventArgs e)
         {
@@ -337,6 +381,8 @@ namespace AmazonChecker
 
         private void StopProcess()
         {
+            
+
             if (this._chromeDriver != null)
             {
                 this._chromeDriver.Dispose();
@@ -344,7 +390,13 @@ namespace AmazonChecker
 
             this.Invoke(new Action(() =>
             {
+                this.progressStatus.Value = 0;
+                this.progressStatus.Maximum = 0;
+                this.progressStatus.Minimum = 0;
+                this.progressStatus.Refresh();
                 this.btnRun.Enabled = true;
+                this.lblEnvironmentRun.Text = string.Empty;
+                this.lblStatus.Text = string.Empty;
                 this.btnStop.Enabled = false;
                 this.btnRun.Text = "Run";
                 this.IsRunningProcess = false;
@@ -388,10 +440,19 @@ namespace AmazonChecker
 
         private void tabFileExccel_SelectedIndexChanged(object sender, EventArgs e)
         {
-            this.IsRunningExcel = this.tabRunning.SelectedTab == this.tabFileExcel;
-            Settings.Default["isRunningExcel"] = this.IsRunningExcel;
+            if (!IsRunningProcess)
+            {
+                this.IsRunningExcel = this.tabRunning.SelectedTab == this.tabFileExcel;
+                Settings.Default["IsRunningExcel"] = this.IsRunningExcel;
+                Settings.Default.Save();
+                this.lblEnvironmentRun.Text = "Chạy " + (this.IsRunningExcel ? this.tabFileExcel.Text : this.tabGoogleSheets.Text);
+            }
+        }
+
+        private void checkBox1_Click(object sender, EventArgs e)
+        {
+            Settings.Default["IsShowBrowser"] = this.cbHideBrowser.Checked;
             Settings.Default.Save();
-            this.lbEnvironmentRun.Text = "Chạy " + (this.IsRunningExcel ? this.tabFileExcel.Text : this.tabGoogleSheets.Text);
         }
     }
 }
